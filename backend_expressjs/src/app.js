@@ -1,3 +1,5 @@
+require('dotenv').config();
+
 const cors = require('cors');
 const express = require('express');
 const routes = require('./routes');
@@ -7,10 +9,27 @@ const swaggerSpec = require('../swagger');
 // Initialize express app
 const app = express();
 
+/**
+ * CORS:
+ * - Allow configured ALLOWED_ORIGINS (comma-separated)
+ * - Always allow local React dev default at http://localhost:3000
+ */
+const allowedOrigins = (process.env.ALLOWED_ORIGINS || 'http://localhost:3000')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+
 app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  origin: (origin, callback) => {
+    // Allow non-browser clients (curl/postman) with no origin.
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    return callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  methods: (process.env.ALLOWED_METHODS || 'GET,POST,PUT,DELETE,PATCH,OPTIONS').split(',').map((m) => m.trim()),
+  allowedHeaders: (process.env.ALLOWED_HEADERS || 'Content-Type,Authorization').split(',').map((h) => h.trim()),
+  maxAge: Number(process.env.CORS_MAX_AGE || 3600),
+  credentials: false
 }));
 app.set('trust proxy', true);
 app.use('/docs', swaggerUi.serve, (req, res, next) => {
