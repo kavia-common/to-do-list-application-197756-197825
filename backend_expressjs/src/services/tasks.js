@@ -3,6 +3,15 @@
 const pool = require('../db/pool');
 
 class TasksService {
+  _normalizeTaskRow(row) {
+    if (!row) return row;
+    return {
+      ...row,
+      // Frontend-friendly: always boolean (DB stores tinyint 0/1).
+      is_completed: Boolean(row.is_completed),
+    };
+  }
+
   // PUBLIC_INTERFACE
   async listTasks() {
     /** List all tasks ordered by most recently modified first. */
@@ -18,7 +27,7 @@ class TasksService {
        FROM tasks
        ORDER BY modified_date DESC, uid DESC`
     );
-    return rows;
+    return rows.map((r) => this._normalizeTaskRow(r));
   }
 
   // PUBLIC_INTERFACE
@@ -50,13 +59,13 @@ class TasksService {
        WHERE uid = ?`,
       [id]
     );
-    return rows[0] || null;
+    return this._normalizeTaskRow(rows[0] || null);
   }
 
   // PUBLIC_INTERFACE
   async updateTask(id, { title, description, due_date, is_completed }) {
     /**
-     * Full update of mutable fields.
+     * Partial update of mutable fields.
      * Any field passed as undefined will not be overwritten.
      */
     const existing = await this.getTaskById(id);
@@ -95,6 +104,13 @@ class TasksService {
     );
     if (result.affectedRows === 0) return null;
     return this.getTaskById(id);
+  }
+
+  // PUBLIC_INTERFACE
+  async pingDatabase() {
+    /** Verify DB connectivity with a lightweight round-trip query. */
+    const [rows] = await pool.query('SELECT 1 AS ok');
+    return rows && rows[0] && rows[0].ok === 1;
   }
 }
 

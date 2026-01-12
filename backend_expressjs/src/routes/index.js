@@ -33,6 +33,20 @@ const router = express.Router();
  */
 router.get('/', healthController.check.bind(healthController));
 
+/**
+ * @swagger
+ * /health/db:
+ *   get:
+ *     summary: Database health endpoint
+ *     description: Verifies database connectivity with a lightweight query.
+ *     responses:
+ *       200:
+ *         description: Database reachable
+ *       503:
+ *         description: Database not reachable
+ */
+router.get('/health/db', healthController.checkDb.bind(healthController));
+
 // Tasks endpoints
 router.use('/tasks', tasksRoutes);
 

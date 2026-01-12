@@ -1,6 +1,12 @@
 'use strict';
 
 const tasksService = require('../services/tasks');
+const {
+  isNonEmptyString,
+  normalizeNullableString,
+  parseOptionalDateTime,
+  normalizeIsCompleted,
+} = require('../utils/validation');
 
 class TasksController {
   // PUBLIC_INTERFACE
@@ -20,14 +26,24 @@ class TasksController {
     try {
       const { title, description, due_date } = req.body || {};
 
-      if (!title || typeof title !== 'string' || !title.trim()) {
+      if (!isNonEmptyString(title)) {
         return res.status(400).json({ message: 'title is required and must be a non-empty string' });
+      }
+
+      const normalizedDescription = normalizeNullableString(description);
+      if (normalizedDescription === undefined && description !== undefined) {
+        return res.status(400).json({ message: 'description must be a string or null when provided' });
+      }
+
+      const dueDateParsed = parseOptionalDateTime(due_date);
+      if (!dueDateParsed.ok) {
+        return res.status(400).json({ message: dueDateParsed.message });
       }
 
       const created = await tasksService.createTask({
         title: title.trim(),
-        description: typeof description === 'string' ? description : null,
-        due_date: due_date || null
+        description: normalizedDescription === undefined ? null : normalizedDescription,
+        due_date: dueDateParsed.value === undefined ? null : dueDateParsed.value,
       });
 
       return res.status(201).json(created);
@@ -45,23 +61,38 @@ class TasksController {
         return res.status(400).json({ message: 'id must be a number' });
       }
 
-      const { title, description, due_date, is_completed } = req.body || {};
+      const body = req.body || {};
+      const { title, description, due_date, is_completed } = body;
 
-      if (title !== undefined && (typeof title !== 'string' || !title.trim())) {
+      // Disallow completely empty updates (common client mistake).
+      if (Object.keys(body).length === 0) {
+        return res.status(400).json({ message: 'Request body must include at least one updatable field' });
+      }
+
+      if (title !== undefined && !isNonEmptyString(title)) {
         return res.status(400).json({ message: 'title must be a non-empty string when provided' });
       }
-      if (description !== undefined && description !== null && typeof description !== 'string') {
+
+      const normalizedDescription = normalizeNullableString(description);
+      if (normalizedDescription === undefined && description !== undefined) {
         return res.status(400).json({ message: 'description must be a string or null when provided' });
       }
-      if (is_completed !== undefined && typeof is_completed !== 'boolean' && is_completed !== 0 && is_completed !== 1) {
+
+      const dueDateParsed = parseOptionalDateTime(due_date);
+      if (!dueDateParsed.ok) {
+        return res.status(400).json({ message: dueDateParsed.message });
+      }
+
+      const normalizedCompleted = normalizeIsCompleted(is_completed);
+      if (normalizedCompleted === undefined && is_completed !== undefined) {
         return res.status(400).json({ message: 'is_completed must be a boolean (or 0/1) when provided' });
       }
 
       const updated = await tasksService.updateTask(id, {
         title: title !== undefined ? title.trim() : undefined,
-        description,
-        due_date,
-        is_completed: is_completed === 1 ? true : is_completed === 0 ? false : is_completed
+        description: normalizedDescription,
+        due_date: dueDateParsed.value,
+        is_completed: normalizedCompleted,
       });
 
       if (!updated) {
